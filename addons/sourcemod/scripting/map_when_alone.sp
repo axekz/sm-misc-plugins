@@ -116,14 +116,6 @@ Action HandleMapRequest(int client, int args)
         return Plugin_Handled;
     }
 
-    int cap = gCvarMaxMatches.IntValue; // default 12
-    if (cap > 0 && found > cap)
-    {
-        PrintToChat(client, "[Map] Too many matches (%d). Please type more letters (max %d).", found, cap);
-        delete results;
-        return Plugin_Handled;
-    }
-
     if (found == 1)
     {
         char picked[PLATFORM_MAX_PATH];
@@ -140,24 +132,25 @@ Action HandleMapRequest(int client, int args)
         return Plugin_Handled;
     }
 
-    // 2..cap -> show choose menu
-    Menu m = new Menu(Menu_SelectMatch, MENU_ACTIONS_DEFAULT);
-    m.SetTitle("Choose a map");
+    // 2..cap -> show choose menu (like nominations)
+    Menu m = new Menu(Menu_SelectMatch, MENU_ACTIONS_DEFAULT|MenuAction_DrawItem|MenuAction_DisplayItem);
+    m.SetTitle("Select map");
 
-    char entry[PLATFORM_MAX_PATH], display[PLATFORM_MAX_PATH];
+    char mapResult[PLATFORM_MAX_PATH];
     for (int i = 0; i < results.Length; i++)
     {
-        g_MapList.GetString(results.Get(i), entry, sizeof(entry));
-        if (FindMap(entry, entry, sizeof(entry)) != FindMap_Found)
+        g_MapList.GetString(results.Get(i), mapResult, sizeof(mapResult));
+        // Resolve the map name
+        if (FindMap(mapResult, mapResult, sizeof(mapResult)) != FindMap_Found)
             continue;
 
-        GetMapDisplayName(entry, display, sizeof(display));
-        m.AddItem(entry, display);
+        // Store resolved map name as both info and display (like nominations)
+        m.AddItem(mapResult, mapResult);
     }
 
     delete results;
     m.ExitButton = true;
-    m.Display(client, 20);
+    m.Display(client, 30);
     return Plugin_Handled;
 }
 
@@ -207,7 +200,7 @@ void ClearPending()
     g_sPendingMap[0] = '\0';
 }
 
-// === Menu callback ===
+// === Menu callback (like nominations) ===
 public int Menu_SelectMatch(Menu menu, MenuAction action, int param1, int param2)
 {
     switch (action)
@@ -215,8 +208,24 @@ public int Menu_SelectMatch(Menu menu, MenuAction action, int param1, int param2
         case MenuAction_Select:
         {
             char mapname[PLATFORM_MAX_PATH];
+            // Get the map name and start pending change
             menu.GetItem(param2, mapname, sizeof(mapname));
             StartPending(param1, mapname);
+        }
+        case MenuAction_DrawItem:
+        {
+            // All items are enabled (no disabled maps like nominations)
+            return ITEMDRAW_DEFAULT;
+        }
+        case MenuAction_DisplayItem:
+        {
+            char mapname[PLATFORM_MAX_PATH];
+            menu.GetItem(param2, mapname, sizeof(mapname));
+            
+            // Show display name instead of internal map name
+            char displayName[PLATFORM_MAX_PATH];
+            GetMapDisplayName(mapname, displayName, sizeof(displayName));
+            return RedrawMenuItem(displayName);
         }
         case MenuAction_End:
         {
@@ -247,7 +256,9 @@ int FindMatchingMaps(ArrayList mapList, ArrayList results, const char[] input)
     int matches = 0;
     char map[PLATFORM_MAX_PATH];
 
-    // Collect all; menu cap handled earlier via cvar.
+    int maxmatches = gCvarMaxMatches.IntValue;
+
+    // Collect matches (like nominations)
     for (int i = 0; i < map_count; i++)
     {
         mapList.GetString(i, map, sizeof(map));
@@ -255,6 +266,12 @@ int FindMatchingMaps(ArrayList mapList, ArrayList results, const char[] input)
         {
             results.Push(i);
             matches++;
+
+            // Respect max matches limit during collection (like nominations)
+            if (maxmatches > 0 && matches >= maxmatches)
+            {
+                break;
+            }
         }
     }
     return matches;

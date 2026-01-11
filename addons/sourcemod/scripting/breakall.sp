@@ -17,6 +17,23 @@ public void OnPluginStart()
 
 public Action Cmd_BreakAll(int client, int args)
 {
+    // Allow if user is admin (generic flag), or if they are the only real player on the server
+    bool isAdmin = (client > 0 && CheckCommandAccess(client, "sm_breakall", ADMFLAG_GENERIC, true));
+    int numPlayers = 0;
+    for (int i = 1; i <= MaxClients; i++)
+    {
+        if (IsClientInGame(i) && !IsFakeClient(i))
+        {
+            numPlayers++;
+        }
+    }
+    if (!isAdmin && numPlayers > 1)
+    {
+        if (client > 0)
+            PrintToChat(client, "[BreakAll] You must be an admin or the only player to use this command.");
+        return Plugin_Handled;
+    }
+
     int count = 0;
     char classname[64];
 
